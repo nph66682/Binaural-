@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1218">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Battements Binauraux</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Concept : un instrument de labo. Type de son en tête, deux voies gauche/droite, courbe du battement, réglages, fond sonore, séance. Un bouton collé en bas. */
+:root {
+  --bg: #0e1218;
+  --surface: #151b23;
+  --line: #262e39;
+  --fg: #e8ecf1;
+  --muted: #8b95a3;
+  --left: #5fcdc4;
+  --right: #f0a46e;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f3f5f8; --surface: #ffffff; --line: #d9dee5; --fg: #12171e; --muted: #5a6573;
+    --left: #0e7c75; --right: #b0540f; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f3f5f8; --surface: #ffffff; --line: #d9dee5; --fg: #12171e; --muted: #5a6573;
+  --left: #0e7c75; --right: #b0540f; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 20px 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: 0.9rem; }
+.label { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+button { font-family: inherit; }
+
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; background: var(--surface); }
+.segbtn { font: 600 0.95rem var(--font-display); color: var(--fg); background: transparent; border: 0; border-radius: 9px; padding: 11px 6px; min-height: 44px; cursor: pointer; }
+.segbtn[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.segbtn:focus-visible { outline: 2px solid var(--left); outline-offset: 2px; }
+.hint { margin: -10px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.channels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ch { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; min-width: 0; }
+.ch .label { display: flex; align-items: center; gap: 8px; }
+.ch .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.ch.l { color: var(--left); }
+.ch.r { color: var(--right); }
+.ch .label span:last-child { color: var(--muted); }
+.ch .val { font-family: var(--font-mono); font-weight: 500; font-size: 1.7rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--fg); margin-top: 6px; white-space: nowrap; }
+.ch .val small { font-size: 0.8rem; color: var(--muted); margin-left: 4px; }
+
+.scope { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 10px; }
+.scope-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.scope canvas { display: block; width: 100%; height: 110px; margin-top: 8px; }
+
+.stack { display: flex; flex-direction: column; gap: 20px; }
+.ctl { display: flex; flex-direction: column; gap: 8px; }
+.ctl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.ctl-top label, .ctl-top .t { font-weight: 600; }
+.num { display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--font-mono); color: var(--muted); }
+.num input {
+  width: 6.2ch; background: transparent; color: var(--fg); border: 0; border-bottom: 1px solid var(--line);
+  font: 500 1.05rem var(--font-mono); text-align: right; padding: 2px 0; border-radius: 0; font-variant-numeric: tabular-nums;
+}
+.num input:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+input[type="range"] { width: 100%; accent-color: var(--fg); height: 28px; margin: 0; }
+input[type="range"]:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: 500 0.82rem var(--font-mono); color: var(--fg); background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 12px; cursor: pointer; min-height: 36px;
+}
+.chip small { color: var(--muted); margin-left: 4px; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip[aria-pressed="true"] small { color: var(--bg); opacity: 0.7; }
+.chip:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.chip.act { border-color: var(--muted); }
+
+.sec { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.sec > summary { cursor: pointer; padding: 14px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+.sec > summary::-webkit-details-marker { display: none; }
+.sec > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin-right: 4px; transition: transform 0.15s; }
+.sec[open] > summary::after { transform: rotate(-135deg); }
+.sec > summary:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; border-radius: 10px; }
+.sec-body { padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 18px; }
+
+.addbtn { font: 600 0.95rem var(--font-display); color: var(--fg); background: transparent; border: 1px dashed var(--muted); border-radius: 10px; padding: 12px 14px; min-height: 48px; cursor: pointer; width: 100%; }
+.addbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.tracks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tracks li { display: flex; gap: 6px; align-items: stretch; }
+.tr { flex: 1; min-width: 0; text-align: left; font: 500 0.88rem var(--font-mono); color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr[aria-current="true"] { border-color: var(--left); color: var(--left); }
+.tr:focus-visible, .rm:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.rm { flex: 0 0 44px; font: 500 1.1rem var(--font-mono); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.empty { color: var(--muted); font-size: 0.88rem; margin: 0; }
+.rampbox { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
+.rampbox .num { gap: 8px; }
+.small { color: var(--muted); font-size: 0.85rem; margin: 0; }
+
+.notes { border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: 0.85rem; display: flex; flex-direction: column; gap: 6px; }
+.notes p { margin: 0; max-width: 62ch; }
+
+.bar { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; }
+#toggle { font: 700 1.15rem var(--font-display); letter-spacing: 0.01em; background: var(--fg); color: var(--bg); border: 0; border-radius: 12px; padding: 16px 20px; min-height: 58px; cursor: pointer; width: 100%; }
+#toggle:focus-visible { outline: 3px solid var(--left); outline-offset: 3px; }
+#status { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); text-align: center; min-height: 1.3em; }
+@media (max-width: 380px) { .ch .val { font-size: 1.45rem; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Battements Binauraux</h1>
+    <p class="sub">Binaural, isochrone, fond sonore et séances.</p>
+  </header>
+
+  <div class="seg" role="group" aria-label="Type de son" id="modeSeg">
+    <button type="button" class="segbtn" data-mode="bin" aria-pressed="true">Binaural</button>
+    <button type="button" class="segbtn" data-mode="iso" aria-pressed="false">Isochrone</button>
+    <button type="button" class="segbtn" data-mode="both" aria-pressed="false">Les deux</button>
+  </div>
+  <p class="hint" id="modeHint"></p>
+
+  <section class="channels" aria-label="Fréquences envoyées à chaque oreille">
+    <div class="ch l">
+      <div class="label"><span class="dot"></span><span>Gauche</span></div>
+      <div class="val"><span id="fl">253.75</span><small>Hz</small></div>
+    </div>
+    <div class="ch r">
+      <div class="label"><span class="dot"></span><span>Droite</span></div>
+      <div class="val"><span id="fr">258.25</span><small>Hz</small></div>
+    </div>
+  </section>
+
+  <section class="scope" aria-label="Forme du battement">
+    <div class="scope-head">
+      <span class="label" id="scopeTitle">Battement perçu</span>
+      <span class="label" id="scopeInfo">4,5 par seconde</span>
+    </div>
+    <canvas id="scope" role="img" aria-label="Courbe du volume qui monte et descend au rythme du battement"></canvas>
+  </section>
+
+  <section class="ctl">
+    <span class="label">Scénarios</span>
+    <div class="chips" id="scen">
+      <button type="button" class="chip act" data-s="sleep">Endormissement</button>
+      <button type="button" class="chip act" data-s="calm">Détente</button>
+      <button type="button" class="chip act" data-s="med">Méditation</button>
+      <button type="button" class="chip act" data-s="focus">Concentration</button>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="ctl">
+      <div class="ctl-top">
+        <label for="beat" id="beatLabel">Battement</label>
+        <span class="num"><input id="beatN" type="number" inputmode="decimal" min="0.5" max="40" step="0.1" value="4.5" aria-label="Battement en hertz"> Hz</span>
+      </div>
+      <input id="beat" type="range" min="0.5" max="40" step="0.1" value="4.5">
+      <div class="chips" id="presets">
+        <button type="button" class="chip" data-beat="2">Delta<small>2</small></button>
+        <button type="button" class="chip" data-beat="4.5">Thêta<small>4,5</small></button>
+        <button type="button" class="chip" data-beat="10">Alpha<small>10</small></button>
+        <button type="button" class="chip" data-beat="20">Bêta<small>20</small></button>
+        <button type="button" class="chip" data-beat="40">Gamma<small>40</small></button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <div class="ctl-top">
+        <label for="carrier" id="carrierLabel">Porteuse</label>
+        <span class="num"><input id="carrierN" type="number" inputmode="decimal" min="60" max="1000" step="1" value="256" aria-label="Porteuse en hertz"> Hz</span>
+      </div>
+      <input id="carrier" type="range" min="60" max="1000" step="1" value="256">
+    </div>
+
+    <div class="ctl" id="splitCtl">
+      <span class="t" id="splitLabel" style="font-weight:600">Répartition</span>
+      <div class="chips" role="group" aria-labelledby="splitLabel" id="splits">
+        <button type="button" class="chip" data-split="sym" aria-pressed="true">Symétrique</button>
+        <button type="button" class="chip" data-split="fix" aria-pressed="false">Gauche = porteuse</button>
+      </div>
+    </div>
+
+    <div class="ctl" id="isoCtl" hidden>
+      <span class="t" id="shapeLabel" style="font-weight:600">Forme des impulsions</span>
+      <div class="chips" role="group" aria-labelledby="shapeLabel" id="shapes">
+        <button type="button" class="chip" data-shape="sine" aria-pressed="true">Douce</button>
+        <button type="button" class="chip" data-shape="sq" aria-pressed="false">Nette</button>
+      </div>
+      <div class="ctl-top" style="margin-top:6px">
+        <label for="depth">Profondeur</label>
+        <span class="num"><span id="depthV">100</span> %</span>
+      </div>
+      <input id="depth" type="range" min="10" max="100" step="1" value="100">
+    </div>
+
+    <div class="ctl">
+      <div class="ctl-top">
+        <label for="volTone">Volume des tons</label>
+        <span class="num"><span id="volToneV">40</span> %</span>
+      </div>
+      <input id="volTone" type="range" min="0" max="100" step="1" value="40">
+    </div>
+  </section>
+
+  <details class="sec" open>
+    <summary>Fond sonore</summary>
+    <div class="sec-body">
+      <div class="ctl">
+        <button type="button" class="addbtn" id="addFiles">Ajouter des fichiers audio</button>
+        <input id="files" type="file" accept="audio/*" multiple hidden>
+        <ul class="tracks" id="tracks"></ul>
+        <p class="empty" id="noTracks">Aucun fichier. Ajoute de la musique ou une ambiance depuis ton téléphone.</p>
+      </div>
+      <div class="ctl">
+        <div class="ctl-top">
+          <label for="volBg">Volume du fond</label>
+          <span class="num"><span id="volBgV">60</span> %</span>
+        </div>
+        <input id="volBg" type="range" min="0" max="100" step="1" value="60">
+      </div>
+      <div class="ctl">
+        <span class="t" id="loopLabel" style="font-weight:600">Lecture</span>
+        <div class="chips" role="group" aria-labelledby="loopLabel" id="loops">
+          <button type="button" class="chip" data-loop="all" aria-pressed="true">Liste en boucle</button>
+          <button type="button" class="chip" data-loop="one" aria-pressed="false">Un seul en boucle</button>
+          <button type="button" class="chip" data-loop="none" aria-pressed="false">Une fois</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="t" id="noiseLabel" style="font-weight:600">Bruit de fond</span>
+        <div class="chips" role="group" aria-labelledby="noiseLabel" id="noises">
+          <button type="button" class="chip" data-noise="none" aria-pressed="true">Aucun</button>
+          <button type="button" class="chip" data-noise="pink" aria-pressed="false">Rose</button>
+          <button type="button" class="chip" data-noise="white" aria-pressed="false">Blanc</button>
+          <button type="button" class="chip" data-noise="brown" aria-pressed="false">Brun</button>
+        </div>
+        <div class="ctl-top" style="margin-top:6px">
+          <label for="volNoise">Volume du bruit</label>
+          <span class="num"><span id="volNoiseV">25</span> %</span>
+        </div>
+        <input id="volNoise" type="range" min="0" max="100" step="1" value="25">
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" open>
+    <summary>Séance</summary>
+    <div class="sec-body">
+      <div class="ctl">
+        <span class="t" id="timerLabel" style="font-weight:600">Minuteur</span>
+        <div class="chips" role="group" aria-labelledby="timerLabel" id="timers">
+          <button type="button" class="chip" data-min="0" aria-pressed="true">Sans</button>
+          <button type="button" class="chip" data-min="15" aria-pressed="false">15 min</button>
+          <button type="button" class="chip" data-min="30" aria-pressed="false">30 min</button>
+          <button type="button" class="chip" data-min="60" aria-pressed="false">60 min</button>
+          <button type="button" class="chip" data-min="90" aria-pressed="false">90 min</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="t" id="rampLabel" style="font-weight:600">Descente progressive</span>
+        <div class="chips" role="group" aria-labelledby="rampLabel" id="rampOnWrap">
+          <button type="button" class="chip" data-ramp="0" aria-pressed="true">Désactivée</button>
+          <button type="button" class="chip" data-ramp="1" aria-pressed="false">Activée</button>
+        </div>
+        <div class="rampbox" id="rampBox" hidden>
+          <span class="num">vers <input id="rampTo" type="number" inputmode="decimal" min="0.5" max="40" step="0.1" value="2" aria-label="Battement final en hertz"> Hz</span>
+          <span class="num">en <input id="rampMin" type="number" inputmode="numeric" min="1" max="180" step="1" value="20" aria-label="Durée en minutes"> min</span>
+        </div>
+        <p class="small" id="rampInfo" hidden></p>
+      </div>
+    </div>
+  </details>
+
+  <section class="notes">
+    <p>Binaural : un son par oreille, avec un léger écart de fréquence. Casque stéréo obligatoire. Isochrone (le même son haché en impulsions régulières) : fonctionne aussi sans casque.</p>
+    <p>Garde l'écran allumé pendant la séance : sur certains téléphones, le son se coupe quand l'écran s'éteint. Les effets de ces sons varient d'une personne à l'autre.</p>
+  </section>
+
+  <div class="bar">
+    <button type="button" id="toggle">Lancer</button>
+    <div id="status" role="status" aria-live="polite">Prêt. Mets ton casque avant de lancer.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var FADE_IN = 2, FADE_OUT = 5;
+
+  var DEF = { mode: 'bin', beat: 4.5, carrier: 256, split: 'sym', shape: 'sine', depth: 100,
+    volTone: 40, volBg: 60, volNoise: 25, noise: 'none', loop: 'all', timer: 0,
+    rampOn: false, rampTo: 2, rampMin: 20 };
+  var state = {};
+  for (var k in DEF) state[k] = DEF[k];
+  try {
+    var saved = JSON.parse(localStorage.getItem('bb-state-v2') || 'null');
+    if (saved) for (var key in DEF) if (key in saved && typeof saved[key] === typeof DEF[key]) state[key] = saved[key];
+  } catch (e) {}
+
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function r1(v) { return Math.round(v * 10) / 10; }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function fmt2(n) { return r2(n).toFixed(2); }
+  function fmtBeat(n) { return String(r1(n)).replace('.', ','); }
+  function save() { try { localStorage.setItem('bb-state-v2', JSON.stringify(state)); } catch (e) {} }
+
+  state.beat = clamp(r1(state.beat), 0.5, 40);
+  state.carrier = clamp(Math.round(state.carrier), 60, 1000);
+  state.rampTo = clamp(r1(state.rampTo), 0.5, 40);
+  state.rampMin = clamp(Math.round(state.rampMin), 1, 180);
+  state.depth = clamp(Math.round(state.depth), 10, 100);
+
+  var A = { ctx: null, sess: null, bgGain: null, bgSrc: null, noiseGain: null };
+  var S = null;             // graphe des tons de la séance en cours
+  var noiseSrc = null;
+  var noiseCache = {};
+  var bgEl = new Audio();
+  bgEl.preload = 'auto';
+  var tracks = [], cur = -1;
+  var playing = false, endAt = 0, t0 = 0, rampFrom = 4.5, tick = null, wakeLock = null, stopTimer = null;
+
+  function gTone() { return Math.pow(state.volTone / 100, 2) * 0.8; }
+  function gBg() { return Math.pow(state.volBg / 100, 2); }
+  function gNoise() { return Math.pow(state.volNoise / 100, 2) * 0.6; }
+
+  function beatNow() {
+    if (playing && state.rampOn) {
+      var p = clamp((Date.now() - t0) / (state.rampMin * 60000), 0, 1);
+      return r2(rampFrom + (state.rampTo - rampFrom) * p);
+    }
+    return state.beat;
+  }
+  function splitOn() { return state.mode !== 'iso'; }
+  function pulseOn() { return state.mode !== 'bin'; }
+  function freqs(b) {
+    if (b === undefined) b = beatNow();
+    var c = state.carrier;
+    if (!splitOn()) return [c, c];
+    if (state.split === 'sym') return [Math.max(1, c - b / 2), c + b / 2];
+    return [c, c + b];
+  }
+  function pulseShape(x) {
+    var d = state.depth / 100;
+    var base = state.shape === 'sine' ? (x + 1) / 2 : 0.5 + 0.5 * Math.tanh(5 * x);
+    return 1 - d + d * base;
+  }
+  function makeCurve() {
+    var N = 1024, c = new Float32Array(N);
+    for (var i = 0; i < N; i++) {
+      var x = -1 + 2 * i / (N - 1);
+      c[i] = pulseOn() ? pulseShape(x) : 1;
+    }
+    return c;
+  }
+
+  /* ---------- Moteur audio ---------- */
+  function ensureCtx() {
+    if (A.ctx) return A.ctx;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    var ctx = new AC();
+    A.ctx = ctx;
+    A.sess = ctx.createGain(); A.sess.gain.value = 0; A.sess.connect(ctx.destination);
+    A.bgGain = ctx.createGain(); A.bgGain.gain.value = gBg(); A.bgGain.connect(A.sess);
+    A.bgSrc = ctx.createMediaElementSource(bgEl); A.bgSrc.connect(A.bgGain);
+    A.noiseGain = ctx.createGain(); A.noiseGain.gain.value = gNoise(); A.noiseGain.connect(A.sess);
+    return ctx;
+  }
+
+  function noiseBuffer(type) {
+    if (noiseCache[type]) return noiseCache[type];
+    var ctx = A.ctx, sr = ctx.sampleRate;
+    var len = Math.floor(sr * 8), F = Math.floor(sr * 0.15), total = len + F;
+    var buf = ctx.createBuffer(2, len, sr);
+    for (var c = 0; c < 2; c++) {
+      var x = new Float32Array(total);
+      var b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+      for (var i = 0; i < total; i++) {
+        var w = Math.random() * 2 - 1, v;
+        if (type === 'white') {
+          v = w * 0.5;
+        } else if (type === 'pink') {
+          b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759;
+          b2 = 0.96900 * b2 + w * 0.1538520; b3 = 0.86650 * b3 + w * 0.3104856;
+          b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+          v = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+          b6 = w * 0.115926;
+        } else {
+          last = (last + 0.02 * w) / 1.02;
+          v = last * 3.5;
+        }
+        x[i] = v;
+      }
+      var d = buf.getChannelData(c);
+      for (var j = 0; j < len; j++) d[j] = x[j];
+      for (var m = 0; m < F; m++) {
+        var t = m / F;
+        d[m] = x[m] * t + x[len + m] * (1 - t);
+      }
+    }
+    noiseCache[type] = buf;
+    return buf;
+  }
+
+  function applyNoise() {
+    if (!A.ctx) return;
+    if (noiseSrc) { try { noiseSrc.stop(); noiseSrc.disconnect(); } catch (e) {} noiseSrc = null; }
+    if (!playing || state.noise === 'none') return;
+    var s = A.ctx.createBufferSource();
+    s.buffer = noiseBuffer(state.noise);
+    s.loop = true;
+    s.connect(A.noiseGain);
+    s.start();
+    noiseSrc = s;
+  }
+
+  function startTones() {
+    var ctx = A.ctx, f = freqs();
+    var oscL = ctx.createOscillator(), oscR = ctx.createOscillator();
+    oscL.frequency.value = f[0]; oscR.frequency.value = f[1];
+    var merger = ctx.createChannelMerger(2);
+    var pulse = ctx.createGain(); pulse.gain.value = 0;
+    var toneMaster = ctx.createGain(); toneMaster.gain.value = gTone();
+    var lfo = ctx.createOscillator(); lfo.frequency.value = beatNow();
+    var shaper = ctx.createWaveShaper(); shaper.curve = makeCurve();
+    oscL.connect(merger, 0, 0); oscR.connect(merger, 0, 1);
+    merger.connect(pulse); pulse.connect(toneMaster); toneMaster.connect(A.sess);
+    lfo.connect(shaper); shaper.connect(pulse.gain);
+    oscL.start(); oscR.start(); lfo.start();
+    S = { oscL: oscL, oscR: oscR, lfo: lfo, shaper: shaper, pulse: pulse, toneMaster: toneMaster, merger: merger };
+  }
+
+  function applyBeat() {
+    if (!S) return;
+    var b = beatNow(), f = freqs(b), t = A.ctx.currentTime;
+    S.oscL.frequency.setTargetAtTime(f[0], t, 0.08);
+    S.oscR.frequency.setTargetAtTime(f[1], t, 0.08);
+    S.lfo.frequency.setTargetAtTime(b, t, 0.08);
+  }
+
+  function startBg() {
+    if (!tracks.length) return;
+    if (cur < 0) cur = 0;
+    if (bgEl.getAttribute('data-i') !== String(cur)) {
+      bgEl.src = tracks[cur].url;
+      bgEl.setAttribute('data-i', String(cur));
+    }
+    bgEl.loop = state.loop === 'one';
+    var p = bgEl.play();
+    if (p && p.catch) p.catch(function () { $('status').textContent = 'Impossible de lire ce fichier audio.'; });
+    renderTracks();
+  }
+
+  async function lockScreen() {
+    try {
+      if (navigator.wakeLock && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) { wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (playing && document.visibilityState === 'visible') lockScreen();
+  });
+
+  function start() {
+    var ctx = ensureCtx();
+    if (!ctx) { $('status').textContent = "Ce navigateur ne sait pas produire de son. Essaie Chrome."; return; }
+    if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+    if (ctx.resume) ctx.resume();
+    playing = true;
+    t0 = Date.now(); rampFrom = state.beat;
+    endAt = state.timer > 0 ? Date.now() + state.timer * 60000 : 0;
+    A.bgGain.gain.value = gBg(); A.noiseGain.gain.value = gNoise();
+    startTones();
+    applyNoise();
+    startBg();
+    var now = ctx.currentTime;
+    A.sess.gain.cancelScheduledValues(now);
+    A.sess.gain.setValueAtTime(A.sess.gain.value, now);
+    A.sess.gain.linearRampToValueAtTime(1, now + FADE_IN);
+    $('toggle').textContent = 'Arrêter';
+    lockScreen();
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: 'Battements Binauraux' });
+        navigator.mediaSession.setActionHandler('play', function () { if (!playing) start(); });
+        navigator.mediaSession.setActionHandler('pause', function () { if (playing) stop(); });
+      } catch (e) {}
+    }
+    updateStatus();
+    refresh();
+    tick = setInterval(onTick, 250);
+  }
+
+  function stop(finished) {
+    if (!playing) return;
+    playing = false;
+    clearInterval(tick); tick = null;
+    endAt = 0;
+    var ctx = A.ctx, s = S, ns = noiseSrc;
+    S = null; noiseSrc = null;
+    var now = ctx.currentTime;
+    A.sess.gain.cancelScheduledValues(now);
+    A.sess.gain.setValueAtTime(A.sess.gain.value, now);
+    A.sess.gain.linearRampToValueAtTime(0, now + 0.6);
+    stopTimer = setTimeout(function () {
+      stopTimer = null;
+      try { if (s) { s.oscL.stop(); s.oscR.stop(); s.lfo.stop(); s.toneMaster.disconnect(); } } catch (e) {}
+      try { if (ns) { ns.stop(); ns.disconnect(); } } catch (e) {}
+      if (!playing) bgEl.pause();
+    }, 700);
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    $('toggle').textContent = 'Lancer';
+    $('status').textContent = finished === true ? 'Séance terminée.' : 'Arrêté.';
+    refresh();
+  }
+
+  function onTick() {
+    if (!playing) return;
+    applyBeat();
+    updateReadout();
+    updateStatus();
+    if (endAt && endAt - Date.now() <= FADE_OUT * 1000 && endAt - Date.now() > 0) {
+      var now = A.ctx.currentTime;
+      A.sess.gain.cancelScheduledValues(now);
+      A.sess.gain.setValueAtTime(A.sess.gain.value, now);
+      A.sess.gain.linearRampToValueAtTime(0, now + Math.max(0.2, (endAt - Date.now()) / 1000));
+    }
+    if (endAt && Date.now() >= endAt) stop(true);
+  }
+
+  function updateStatus() {
+    if (!playing) return;
+    var parts = ['En cours'];
+    if (state.rampOn) parts.push(fmtBeat(beatNow()) + ' Hz');
+    if (endAt) {
+      var left = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+      var m = Math.floor(left / 60), s = left % 60;
+      parts.push('reste ' + m + ':' + (s < 10 ? '0' : '') + s);
+    }
+    $('status').textContent = parts.join(' · ');
+  }
+
+  /* ---------- Interface ---------- */
+  var HINTS = {
+    bin: 'Deux fréquences proches, une par oreille. Le casque est indispensable.',
+    iso: 'Un seul son, haché en impulsions régulières. Marche aussi sans casque.',
+    both: 'Tons binauraux, eux aussi hachés en impulsions. Casque conseillé.'
+  };
+  var TITLES = { bin: 'Battement perçu', iso: 'Impulsions', both: 'Impulsions et battement' };
+
+  function pressGroup(groupId, attr, value) {
+    var els = document.querySelectorAll('#' + groupId + ' [data-' + attr + ']');
+    for (var i = 0; i < els.length; i++) els[i].setAttribute('aria-pressed', els[i].getAttribute('data-' + attr) === String(value) ? 'true' : 'false');
+  }
+
+  function updateReadout() {
+    var f = freqs();
+    $('fl').textContent = fmt2(f[0]);
+    $('fr').textContent = fmt2(f[1]);
+    $('scopeInfo').textContent = fmtBeat(beatNow()) + ' par seconde';
+  }
+
+  function syncUI() {
+    pressGroup('modeSeg', 'mode', state.mode);
+    $('modeHint').textContent = HINTS[state.mode];
+    $('scopeTitle').textContent = TITLES[state.mode];
+    $('beatLabel').textContent = state.mode === 'bin' ? 'Battement' : 'Impulsions par seconde';
+    $('carrierLabel').textContent = splitOn() ? 'Porteuse' : 'Fréquence du son';
+    $('splitCtl').hidden = !splitOn();
+    $('isoCtl').hidden = !pulseOn();
+    pressGroup('splits', 'split', state.split);
+    pressGroup('shapes', 'shape', state.shape);
+    pressGroup('loops', 'loop', state.loop);
+    pressGroup('noises', 'noise', state.noise);
+    pressGroup('timers', 'min', state.timer);
+    pressGroup('rampOnWrap', 'ramp', state.rampOn ? 1 : 0);
+    $('beat').value = state.beat; $('beatN').value = state.beat;
+    $('carrier').value = state.carrier; $('carrierN').value = state.carrier;
+    $('depth').value = state.depth; $('depthV').textContent = state.depth;
+    $('volTone').value = state.volTone; $('volToneV').textContent = state.volTone;
+    $('volBg').value = state.volBg; $('volBgV').textContent = state.volBg;
+    $('volNoise').value = state.volNoise; $('volNoiseV').textContent = state.volNoise;
+    $('rampTo').value = state.rampTo; $('rampMin').value = state.rampMin;
+    $('rampBox').hidden = !state.rampOn;
+    $('rampInfo').hidden = !state.rampOn;
+    $('rampInfo').textContent = 'De ' + fmtBeat(state.beat) + ' Hz à ' + fmtBeat(state.rampTo) + ' Hz en ' + state.rampMin + ' min.';
+    var pre = document.querySelectorAll('#presets .chip');
+    for (var i = 0; i < pre.length; i++) pre[i].setAttribute('aria-pressed', Number(pre[i].dataset.beat) === state.beat ? 'true' : 'false');
+    bgEl.loop = state.loop === 'one';
+    updateReadout();
+  }
+
+  function refresh() {
+    syncUI();
+    if (S) { S.shaper.curve = makeCurve(); applyBeat(); S.toneMaster.gain.setTargetAtTime(gTone(), A.ctx.currentTime, 0.05); }
+    save();
+  }
+
+  function restartRamp() { if (playing) { t0 = Date.now(); rampFrom = state.beat; } }
+
+  function setBeat(v) {
+    if (isNaN(v)) return;
+    state.beat = clamp(r1(v), 0.5, 40);
+    restartRamp();
+    refresh();
+  }
+  function setCarrier(v) {
+    if (isNaN(v)) return;
+    state.carrier = clamp(Math.round(v), 60, 1000);
+    refresh();
+  }
+
+  $('modeSeg').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-mode]'); if (!b) return;
+    state.mode = b.dataset.mode; refresh();
+  });
+  $('beat').addEventListener('input', function (e) { setBeat(parseFloat(e.target.value)); });
+  $('beatN').addEventListener('change', function (e) { setBeat(parseFloat(e.target.value)); });
+  $('carrier').addEventListener('input', function (e) { setCarrier(parseFloat(e.target.value)); });
+  $('carrierN').addEventListener('change', function (e) { setCarrier(parseFloat(e.target.value)); });
+  $('presets').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-beat]'); if (b) setBeat(parseFloat(b.dataset.beat));
+  });
+  $('splits').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-split]'); if (!b) return; state.split = b.dataset.split; refresh();
+  });
+  $('shapes').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-shape]'); if (!b) return; state.shape = b.dataset.shape; refresh();
+  });
+  $('depth').addEventListener('input', function (e) { state.depth = parseInt(e.target.value, 10); refresh(); });
+  $('volTone').addEventListener('input', function (e) { state.volTone = parseInt(e.target.value, 10); refresh(); });
+  $('volBg').addEventListener('input', function (e) {
+    state.volBg = parseInt(e.target.value, 10); $('volBgV').textContent = state.volBg;
+    if (A.ctx) A.bgGain.gain.setTargetAtTime(gBg(), A.ctx.currentTime, 0.05);
+    save();
+  });
+  $('volNoise').addEventListener('input', function (e) {
+    state.volNoise = parseInt(e.target.value, 10); $('volNoiseV').textContent = state.volNoise;
+    if (A.ctx) A.noiseGain.gain.setTargetAtTime(gNoise(), A.ctx.currentTime, 0.05);
+    save();
+  });
+  $('noises').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-noise]'); if (!b) return;
+    state.noise = b.dataset.noise; pressGroup('noises', 'noise', state.noise); applyNoise(); save();
+  });
+  $('loops').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-loop]'); if (!b) return;
+    state.loop = b.dataset.loop; pressGroup('loops', 'loop', state.loop); bgEl.loop = state.loop === 'one'; save();
+  });
+  $('timers').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-min]'); if (!b) return;
+    state.timer = parseInt(b.dataset.min, 10);
+    if (playing) { endAt = state.timer > 0 ? Date.now() + state.timer * 60000 : 0; }
+    refresh(); updateStatus();
+  });
+  $('rampOnWrap').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ramp]'); if (!b) return;
+    state.rampOn = b.dataset.ramp === '1'; restartRamp(); refresh();
+  });
+  $('rampTo').addEventListener('change', function (e) {
+    var v = parseFloat(e.target.value); if (!isNaN(v)) { state.rampTo = clamp(r1(v), 0.5, 40); restartRamp(); refresh(); }
+  });
+  $('rampMin').addEventListener('change', function (e) {
+    var v = parseInt(e.target.value, 10); if (!isNaN(v)) { state.rampMin = clamp(v, 1, 180); restartRamp(); refresh(); }
+  });
+
+  var SCEN = {
+    sleep: { mode: 'bin', beat: 10, carrier: 200, split: 'sym', rampOn: true, rampTo: 2, rampMin: 30, noise: 'brown', timer: 60 },
+    calm:  { mode: 'bin', beat: 10, carrier: 256, split: 'sym', rampOn: false, noise: 'pink', timer: 30 },
+    med:   { mode: 'bin', beat: 6, carrier: 256, split: 'sym', rampOn: false, noise: 'none', timer: 30 },
+    focus: { mode: 'iso', beat: 15, carrier: 220, shape: 'sine', depth: 100, rampOn: false, noise: 'pink', timer: 30 }
+  };
+  $('scen').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-s]'); if (!b) return;
+    var s = SCEN[b.dataset.s]; if (!s) return;
+    for (var key in s) state[key] = s[key];
+    restartRamp();
+    if (playing) endAt = state.timer > 0 ? Date.now() + state.timer * 60000 : 0;
+    refresh(); applyNoise(); updateStatus();
+  });
+
+  /* ---------- Fichiers audio ---------- */
+  function renderTracks() {
+    var ul = $('tracks');
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    $('noTracks').hidden = tracks.length > 0;
+    tracks.forEach(function (t, i) {
+      var li = document.createElement('li');
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'tr'; b.textContent = t.name;
+      if (i === cur) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', function () { selectTrack(i, true); });
+      var x = document.createElement('button');
+      x.type = 'button'; x.className = 'rm'; x.textContent = '×'; x.setAttribute('aria-label', 'Retirer ' + t.name);
+      x.addEventListener('click', function () { removeTrack(i); });
+      li.appendChild(b); li.appendChild(x); ul.appendChild(li);
+    });
+  }
+  function selectTrack(i, play) {
+    cur = i;
+    bgEl.src = tracks[i].url;
+    bgEl.setAttribute('data-i', String(i));
+    bgEl.loop = state.loop === 'one';
+    if (playing && play) { var p = bgEl.play(); if (p && p.catch) p.catch(function () {}); }
+    renderTracks();
+  }
+  function removeTrack(i) {
+    var wasCur = i === cur;
+    URL.revokeObjectURL(tracks[i].url);
+    tracks.splice(i, 1);
+    if (wasCur) {
+      bgEl.pause(); bgEl.removeAttribute('src'); bgEl.removeAttribute('data-i'); bgEl.load();
+      cur = -1;
+      if (tracks.length) selectTrack(Math.min(i, tracks.length - 1), playing);
+    } else if (i < cur) { cur--; bgEl.setAttribute('data-i', String(cur)); }
+    renderTracks();
+  }
+  $('addFiles').addEventListener('click', function () { $('files').click(); });
+  $('files').addEventListener('change', function (e) {
+    var list = e.target.files, skipped = 0;
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      var ok = /^audio\//.test(f.type) || /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|webm)$/i.test(f.name);
+      if (!ok) { skipped++; continue; }
+      tracks.push({ name: f.name, url: URL.createObjectURL(f) });
+    }
+    e.target.value = '';
+    if (cur < 0 && tracks.length) selectTrack(0, false); else renderTracks();
+    if (skipped) $('status').textContent = skipped + ' fichier(s) ignoré(s) : ce n\'est pas de l\'audio.';
+  });
+  bgEl.addEventListener('ended', function () {
+    if (!playing || !tracks.length) return;
+    if (state.loop === 'all') {
+      if (tracks.length === 1) { bgEl.currentTime = 0; bgEl.play(); }
+      else selectTrack((cur + 1) % tracks.length, true);
+    }
+  });
+  bgEl.addEventListener('error', function () {
+    if (bgEl.getAttribute('src')) $('status').textContent = 'Ce fichier audio ne peut pas être lu.';
+  });
+
+  $('toggle').addEventListener('click', function () { playing ? stop() : start(); });
+
+  /* ---------- Courbe ---------- */
+  var canvas = $('scope'), g = canvas.getContext('2d');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function envAt(t, b) {
+    if (state.mode === 'bin') return Math.abs(Math.cos(Math.PI * b * t));
+    return pulseShape(Math.sin(2 * Math.PI * b * t));
+  }
+  function draw() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    var fg = css('--fg'), muted = css('--muted'), line = css('--line'), left = css('--left'), right = css('--right');
+    var mid = h / 2, amp = h / 2 - 6, b = beatNow(), win = 6 / b;
+    g.strokeStyle = line; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, mid + 0.5); g.lineTo(w, mid + 0.5); g.stroke();
+    var N = Math.max(160, Math.floor(w) * 2), i;
+    g.beginPath();
+    for (i = 0; i <= N; i++) {
+      var a = envAt((i / N) * win, b) * amp, x = (i / N) * w;
+      if (i === 0) g.moveTo(x, mid - a); else g.lineTo(x, mid - a);
+    }
+    for (i = N; i >= 0; i--) g.lineTo((i / N) * w, mid + envAt((i / N) * win, b) * amp);
+    g.closePath();
+    var grad = g.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, left); grad.addColorStop(1, right);
+    g.globalAlpha = 0.28; g.fillStyle = grad; g.fill();
+    g.globalAlpha = 1; g.strokeStyle = fg; g.lineWidth = 1.5; g.stroke();
+    if (playing && !reduced) {
+      var cx = (((Date.now() - t0) / 1000) % win) / win * w;
+      g.strokeStyle = muted; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(cx + 0.5, 2); g.lineTo(cx + 0.5, h - 2); g.stroke();
+    }
+  }
+  function loop() { draw(); requestAnimationFrame(loop); }
+
+  renderTracks();
+  syncUI();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  window.addEventListener('resize', draw);
+  if (reduced) {
+    document.addEventListener('input', draw); document.addEventListener('click', draw); draw();
+  } else {
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip act'; b.textContent = "Installer l'appli"; b.style.marginTop = '10px';
+    b.addEventListener('click', function () {
+      if (!deferred) return;
+      deferred.prompt();
+      deferred.userChoice.then(function () { b.remove(); deferred = null; });
+    });
+    var h = document.querySelector('header');
+    if (h) h.appendChild(b);
+  });
+})();
+</script>
+</html>
